@@ -222,7 +222,7 @@
     <section class="overlay" id="overlay">
       <div class="card">
         <h1>Mini Scan Dash</h1>
-        <p class="sub" id="message">拖動探頭收集綠色影像，避開紅色雜訊。前段暖身，後段才會加速。</p>
+        <p class="sub" id="message">拖動探頭收集綠色影像，避開紅色雜訊。節奏已調成休閒版。</p>
         <div class="tips">
           <div class="tip"><b>+</b>收集影像</div>
           <div class="tip"><b>!</b>避開雜訊</div>
@@ -346,7 +346,7 @@
           x: rand(radius + 12, w - radius - 12),
           y: -radius - 20,
           r: radius,
-          vy: rand(1.55, 2.65) + t * 0.00032,
+          vy: rand(0.78, 1.42) + t * 0.00012,
           wobble: rand(0, Math.PI * 2),
           hit: false
         });
@@ -380,18 +380,18 @@
         scanTimer += dt;
         spawnTimer -= dt;
         shield = Math.max(0, shield - dt);
-        player.x += (player.tx - player.x) * Math.min(1, dt * 0.018);
+        player.x += (player.tx - player.x) * Math.min(1, dt * 0.028);
 
         if (spawnTimer <= 0) {
           spawn();
-          spawnTimer = Math.max(300, 820 - t * 0.035);
-          if (t > 18000 && Math.random() < Math.min(0.22, t / 76000)) spawn();
+          spawnTimer = Math.max(520, 1250 - t * 0.012);
+          if (t > 45000 && Math.random() < Math.min(0.12, t / 140000)) spawn();
         }
 
         for (let i = objects.length - 1; i >= 0; i--) {
           const o = objects[i];
-          o.y += o.vy * dt * 0.06;
-          o.x += Math.sin(t * 0.004 + o.wobble) * (o.type === "noise" ? 0.8 : 0.35);
+          o.y += o.vy * dt * 0.046;
+          o.x += Math.sin(t * 0.003 + o.wobble) * (o.type === "noise" ? 0.45 : 0.24);
           const d = Math.hypot(o.x - player.x, o.y - player.y);
           const hitRange = o.type === "noise" ? o.r + player.radius * 0.62 : o.r + player.radius * 1.16;
           if (d < hitRange) {
