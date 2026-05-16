@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Mini Scan Dash</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #eef7f4;
+      --muted: #9fb8b0;
+      --panel: rgba(9, 22, 30, 0.72);
+      --line: rgba(178, 237, 221, 0.25);
+      --good: #78f0b5;
+      --warn: #ffd15a;
+      --bad: #ff6b7a;
+      --cyan: #6bd7ff;
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 30% 8%, rgba(106, 215, 255, 0.22), transparent 32%),
+        radial-gradient(circle at 75% 20%, rgba(120, 240, 181, 0.18), transparent 30%),
+        linear-gradient(180deg, #06121c 0%, #071018 45%, #03070d 100%);
+      color: var(--ink);
+      font-family: ui-rounded, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: none;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+        env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .shell {
+      position: relative;
+      width: min(100vw, 480px);
+      height: min(100vh, 900px);
+      overflow: hidden;
+      background: #050b12;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+    }
+
+    .hud {
+      position: absolute;
+      inset: 12px 12px auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .score, .pill {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    }
+
+    .score {
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0;
+      line-height: 1.1;
+    }
+
+    .score strong {
+      display: block;
+      margin-top: 2px;
+      font-size: clamp(24px, 8vw, 40px);
+      line-height: 0.95;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .side {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .pill {
+      min-width: 84px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      text-align: right;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      z-index: 3;
+      background: linear-gradient(180deg, rgba(3, 8, 13, 0.42), rgba(3, 8, 13, 0.78));
+    }
+
+    .overlay.hidden { display: none; }
+
+    .card {
+      width: min(100%, 360px);
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(8, 19, 28, 0.84);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(31px, 11vw, 48px);
+      line-height: 0.94;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      margin: 0 auto 18px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+      max-width: 26em;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    button {
+      height: 48px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      color: #061018;
+      background: var(--good);
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .tips {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .tip {
+      min-height: 70px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 9px 8px;
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+      line-height: 1.25;
+    }
+
+    .tip b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--cyan);
+      font-size: 16px;
+    }
+
+    .touchpad {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 42%;
+      z-index: 1;
+    }
+  </style>
+</head>
+<body>
+  <main class="shell" aria-label="Mini Scan Dash">
+    <canvas id="game" aria-hidden="true"></canvas>
+    <section class="hud" aria-live="polite">
+      <div class="score">
+        <div class="label">SCORE</div>
+        <strong id="score">0</strong>
+      </div>
+      <div class="side">
+        <div class="pill">HP <span id="hp">3</span></div>
+        <div class="pill">BEST <span id="best">0</span></div>
+      </div>
+    </section>
+    <div class="touchpad" id="touchpad"></div>
+    <section class="overlay" id="overlay">
+      <div class="card">
+        <h1>Mini Scan Dash</h1>
+        <p class="sub" id="message">拖動探頭收集綠色影像，避開紅色雜訊。撐越久，掃描越快。</p>
+        <div class="tips">
+          <div class="tip"><b>+</b>收集影像</div>
+          <div class="tip"><b>!</b>避開雜訊</div>
+          <div class="tip"><b>*</b>護盾加分</div>
+        </div>
+        <div class="actions">
+          <button id="start">開始</button>
+          <button class="secondary" id="sound">音效：開</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const shell = document.querySelector(".shell");
+      const overlay = document.getElementById("overlay");
+      const startBtn = document.getElementById("start");
+      const soundBtn = document.getElementById("sound");
+      const scoreEl = document.getElementById("score");
+      const bestEl = document.getElementById("best");
+      const hpEl = document.getElementById("hp");
+      const msgEl = document.getElementById("message");
+      const pad = document.getElementById("touchpad");
+
+      const DPR = Math.min(window.devicePixelRatio || 1, 2);
+      let w = 360;
+      let h = 720;
+      let state = "ready";
+      let t = 0;
+      let last = 0;
+      let score = 0;
+      let hp = 3;
+      let best = Number(localStorage.getItem("mini_scan_dash_best") || 0);
+      let spawnTimer = 0;
+      let scanTimer = 0;
+      let shield = 0;
+      let muted = false;
+      let audio;
+
+      const player = { x: 180, y: 600, tx: 180, radius: 22 };
+      const objects = [];
+      const bursts = [];
+      const lanes = [];
+
+      const rand = (a, b) => a + Math.random() * (b - a);
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+      function resize() {
+        const r = shell.getBoundingClientRect();
+        w = Math.max(280, Math.floor(r.width));
+        h = Math.max(520, Math.floor(r.height));
+        canvas.width = Math.floor(w * DPR);
+        canvas.height = Math.floor(h * DPR);
+        ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+        player.y = h - 92;
+        player.x = clamp(player.x, 34, w - 34);
+        player.tx = player.x;
+        lanes.length = 0;
+        for (let i = 0; i < 7; i++) lanes.push({ x: (i + 0.5) * w / 7, pulse: rand(0, 8) });
+      }
+
+      function beep(freq, duration, type = "sine", gain = 0.035) {
+        if (muted) return;
+        audio ||= new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audio.createOscillator();
+        const vol = audio.createGain();
+        osc.type = type;
+        osc.frequency.value = freq;
+        vol.gain.value = gain;
+        osc.connect(vol).connect(audio.destination);
+        osc.start();
+        vol.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + duration);
+        osc.stop(audio.currentTime + duration);
+      }
+
+      function reset() {
+        state = "playing";
+        t = 0;
+        score = 0;
+        hp = 3;
+        shield = 0;
+        spawnTimer = 10;
+        scanTimer = 0;
+        objects.length = 0;
+        bursts.length = 0;
+        player.x = w / 2;
+        player.tx = player.x;
+        overlay.classList.add("hidden");
+        updateHud();
+        beep(440, 0.08, "triangle");
+      }
+
+      function updateHud() {
+        scoreEl.textContent = Math.floor(score);
+        bestEl.textContent = Math.floor(best);
+        hpEl.textContent = hp;
+      }
+
+      function endGame() {
+        state = "over";
+        best = Math.max(best, Math.floor(score));
+        localStorage.setItem("mini_scan_dash_best", String(best));
+        msgEl.textContent = "掃描結束。這次 " + Math.floor(score) + " 分，最高 " + best + " 分。";
+        startBtn.textContent = "再玩";
+        overlay.classList.remove("hidden");
+        updateHud();
+        beep(120, 0.28, "sawtooth", 0.025);
+      }
+
+      function spawn() {
+        const roll = Math.random();
+        const type = roll < 0.18 ? "shield" : roll < 0.58 ? "scan" : "noise";
+        const radius = type === "noise" ? rand(18, 29) : rand(15, 24);
+        objects.push({
+          type,
+          x: rand(radius + 12, w - radius - 12),
+          y: -radius - 20,
+          r: radius,
+          vy: rand(2.1, 3.6) + t * 0.00055,
+          wobble: rand(0, Math.PI * 2),
+          hit: false
+        });
+      }
+
+      function pop(x, y, color, n = 14) {
+        for (let i = 0; i < n; i++) {
+          const a = rand(0, Math.PI * 2);
+          const s = rand(0.8, 4.5);
+          bursts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: rand(18, 34), color });
+        }
+      }
+
+      function damage() {
+        if (shield > 0) {
+          shield = 0;
+          score += 25;
+          beep(220, 0.09, "square");
+          return;
+        }
+        hp -= 1;
+        pop(player.x, player.y, "#ff6b7a", 24);
+        beep(92, 0.14, "sawtooth", 0.035);
+        if (hp <= 0) endGame();
+      }
+
+      function step(dt) {
+        if (state !== "playing") return;
+        t += dt;
+        score += dt * 0.012;
+        scanTimer += dt;
+        spawnTimer -= dt;
+        shield = Math.max(0, shield - dt);
+        player.x += (player.tx - player.x) * Math.min(1, dt * 0.018);
+
+        if (spawnTimer <= 0) {
+          spawn();
+          spawnTimer = Math.max(190, 650 - t * 0.052);
+          if (Math.random() < Math.min(0.35, t / 52000)) spawn();
+        }
+
+        for (let i = objects.length - 1; i >= 0; i--) {
+          const o = objects[i];
+          o.y += o.vy * dt * 0.06;
+          o.x += Math.sin(t * 0.004 + o.wobble) * (o.type === "noise" ? 0.8 : 0.35);
+          const d = Math.hypot(o.x - player.x, o.y - player.y);
+          if (d < o.r + player.radius) {
+            objects.splice(i, 1);
+            if (o.type === "scan") {
+              score += 70;
+              pop(o.x, o.y, "#78f0b5", 16);
+              beep(680, 0.055, "triangle", 0.025);
+            } else if (o.type === "shield") {
+              shield = 5400;
+              score += 35;
+              pop(o.x, o.y, "#6bd7ff", 18);
+              beep(900, 0.07, "sine", 0.025);
+            } else {
+              damage();
+            }
+          } else if (o.y > h + 50) {
+            objects.splice(i, 1);
+          }
+        }
+
+        for (let i = bursts.length - 1; i >= 0; i--) {
+          const b = bursts[i];
+          b.x += b.vx;
+          b.y += b.vy;
+          b.vy += 0.04;
+          b.life -= dt * 0.06;
+          if (b.life <= 0) bursts.splice(i, 1);
+        }
+
+        updateHud();
+      }
+
+      function drawGrid() {
+        ctx.save();
+        ctx.globalAlpha = 0.58;
+        ctx.strokeStyle = "rgba(114, 212, 255, 0.16)";
+        ctx.lineWidth = 1;
+        for (const lane of lanes) {
+          lane.pulse += 0.018;
+          ctx.beginPath();
+          ctx.moveTo(lane.x, 0);
+          ctx.lineTo(lane.x + Math.sin(lane.pulse) * 12, h);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 0.35;
+        for (let y = (t * 0.06) % 54; y < h; y += 54) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawPlayer() {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        const glow = shield > 0 ? "rgba(107, 215, 255, 0.8)" : "rgba(120, 240, 181, 0.56)";
+        ctx.shadowColor = glow;
+        ctx.shadowBlur = shield > 0 ? 24 : 16;
+
+        ctx.fillStyle = "#0f2f36";
+        ctx.strokeStyle = shield > 0 ? "#6bd7ff" : "#78f0b5";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.roundRect(-24, -18, 48, 38, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#d8fff0";
+        ctx.fillRect(-12, -8, 24, 5);
+        ctx.fillRect(-7, 2, 14, 5);
+
+        ctx.strokeStyle = "rgba(238, 247, 244, 0.82)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 24, 18, Math.PI * 1.05, Math.PI * 1.95);
+        ctx.stroke();
+
+        if (shield > 0) {
+          ctx.strokeStyle = "rgba(107, 215, 255, 0.75)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, 36 + Math.sin(t * 0.01) * 2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function drawObject(o) {
+        ctx.save();
+        ctx.translate(o.x, o.y);
+        if (o.type === "scan") {
+          ctx.shadowColor = "#78f0b5";
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = "rgba(120, 240, 181, 0.17)";
+          ctx.strokeStyle = "#78f0b5";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(-o.r, -o.r, o.r * 2, o.r * 2, 7);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#d8fff0";
+          ctx.fillRect(-o.r * 0.5, -3, o.r, 6);
+          ctx.fillRect(-3, -o.r * 0.5, 6, o.r);
+        } else if (o.type === "shield") {
+          ctx.shadowColor = "#6bd7ff";
+          ctx.shadowBlur = 20;
+          ctx.strokeStyle = "#6bd7ff";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(0, 0, o.r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(0, 0, o.r * 0.54, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.shadowColor = "#ff6b7a";
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = "rgba(255, 107, 122, 0.2)";
+          ctx.strokeStyle = "#ff6b7a";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          for (let i = 0; i < 8; i++) {
+            const a = i / 8 * Math.PI * 2 + t * 0.004;
+            const r = i % 2 ? o.r * 0.58 : o.r;
+            const x = Math.cos(a) * r;
+            const y = Math.sin(a) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function render() {
+        ctx.clearRect(0, 0, w, h);
+        const bg = ctx.createLinearGradient(0, 0, 0, h);
+        bg.addColorStop(0, "#081622");
+        bg.addColorStop(0.55, "#071018");
+        bg.addColorStop(1, "#03070d");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
+
+        drawGrid();
+
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = "#eef7f4";
+        for (let i = 0; i < 34; i++) {
+          const x = (Math.sin(i * 93.1) * 0.5 + 0.5) * w;
+          const y = ((i * 73 + t * 0.025) % (h + 60)) - 30;
+          ctx.fillRect(x, y, 2, 2);
+        }
+        ctx.restore();
+
+        for (const o of objects) drawObject(o);
+        for (const b of bursts) {
+          ctx.globalAlpha = Math.max(0, b.life / 28);
+          ctx.fillStyle = b.color;
+          ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
+        }
+        ctx.globalAlpha = 1;
+        drawPlayer();
+
+        if (state === "ready") {
+          ctx.save();
+          ctx.globalAlpha = 0.2;
+          ctx.fillStyle = "#78f0b5";
+          ctx.beginPath();
+          ctx.arc(player.x, player.y, 72 + Math.sin(t * 0.006) * 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      function loop(now) {
+        const dt = Math.min(34, now - last || 16);
+        last = now;
+        if (state !== "ready") step(dt);
+        else t += dt;
+        render();
+        requestAnimationFrame(loop);
+      }
+
+      function setTarget(clientX) {
+        const r = shell.getBoundingClientRect();
+        player.tx = clamp(clientX - r.left, 34, w - 34);
+      }
+
+      pad.addEventListener("pointerdown", (e) => {
+        pad.setPointerCapture(e.pointerId);
+        setTarget(e.clientX);
+        if (state === "ready") reset();
+      });
+      pad.addEventListener("pointermove", (e) => setTarget(e.clientX));
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space" || e.code === "Enter") {
+          if (state !== "playing") reset();
+        }
+        if (e.code === "ArrowLeft" || e.code === "KeyA") player.tx -= 34;
+        if (e.code === "ArrowRight" || e.code === "KeyD") player.tx += 34;
+        player.tx = clamp(player.tx, 34, w - 34);
+      });
+
+      startBtn.addEventListener("click", reset);
+      soundBtn.addEventListener("click", () => {
+        muted = !muted;
+        soundBtn.textContent = muted ? "音效：關" : "音效：開";
+        if (!muted) beep(520, 0.06, "triangle");
+      });
+
+      if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function(x, y, width, height, radius) {
+          const r = Math.min(radius, Math.abs(width) / 2, Math.abs(height) / 2);
+          this.beginPath();
+          this.moveTo(x + r, y);
+          this.arcTo(x + width, y, x + width, y + height, r);
+          this.arcTo(x + width, y + height, x, y + height, r);
+          this.arcTo(x, y + height, x, y, r);
+          this.arcTo(x, y, x + width, y, r);
+          this.closePath();
+          return this;
+        };
+      }
+
+      bestEl.textContent = best;
+      resize();
+      window.addEventListener("resize", resize);
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
